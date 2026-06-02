@@ -67,13 +67,23 @@ def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
 
 
 def print_report(metrics: dict):
-    rows = [(k, v) for k, v in metrics.items() if k != "Strategy Mix"]
+    rows = [(k, v) for k, v in metrics.items() if k not in ("Strategy Mix",)]
     print("\n" + "=" * 50)
     print("   NIFTY WEEKLY OPTIONS BACKTEST REPORT")
     print("=" * 50)
     print(tabulate(rows, headers=["Metric", "Value"], tablefmt="rounded_outline"))
     print("\nStrategy Mix:", metrics.get("Strategy Mix", {}))
     print("=" * 50 + "\n")
+
+    # Quick performance grade
+    cagr = metrics.get("CAGR (%)", 0)
+    sharpe = metrics.get("Sharpe Ratio", 0)
+    dd = abs(metrics.get("Max Drawdown (%)", 0))
+    pf = metrics.get("Profit Factor", 0)
+    grade = "🟢 EXCELLENT" if cagr >= 20 and sharpe >= 2.0 and dd <= 20 else \
+            "🟡 GOOD"      if cagr >= 12 and sharpe >= 1.0 and dd <= 25 else \
+            "🔴 NEEDS WORK"
+    print(f"  Grade: {grade}  |  CAGR {cagr:.1f}%  Sharpe {sharpe:.2f}  DD -{dd:.1f}%  PF {pf:.2f}\n")
 
 
 def regime_breakdown(trades: list) -> pd.DataFrame:
