@@ -41,7 +41,7 @@ def _load_data(args: list, start: str, end: str) -> pd.DataFrame:
 def run_backtest(
     args: list,
     start: str = "2019-01-01",
-    end: str = "2024-12-31",
+    end: str = "2025-05-30",
     capital: float = 1_000_000,
 ):
     print(f"\nFetching Nifty + VIX data ({start} → {end})...")
@@ -99,12 +99,12 @@ def weekly_signal(args: list, capital: float = 1_000_000):
     print("\nFetching latest data for weekly signal...")
     if "--sample" in args:
         from src.data.sample_data import generate_sample_data
-        raw = generate_sample_data("2022-01-01")
+        raw = generate_sample_data("2019-01-01")
     elif "--csv" in args:
         idx = args.index("--csv")
         raw = load_from_csv(args[idx + 1])
     else:
-        raw = fetch_combined(start="2022-01-01")
+        raw = fetch_combined(start="2019-01-01")
 
     df = weekly_stats(raw)
     model = RegimeModel(n_states=3)
