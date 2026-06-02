@@ -137,6 +137,7 @@ class Backtester:
         ml_predictor=None,
         ml_features: pd.DataFrame = None,
         use_calendar: bool = True,
+        timesfm_forecasts: pd.DataFrame = None,  # from batch_forecast(); keyed by date
     ):
         self.df = df.copy()
         self.df.index = pd.to_datetime(self.df.index)
@@ -150,6 +151,7 @@ class Backtester:
         self.ml_predictor = ml_predictor
         self.ml_features = ml_features
         self.use_calendar = use_calendar
+        self.timesfm_forecasts = timesfm_forecasts
         self.trades: List[TradeSetup] = []
         self.equity_curve: List[dict] = []
         self._stop_count = 0
@@ -183,6 +185,11 @@ class Backtester:
             if ml_override:
                 self._ml_used += 1
 
+            # TimesFM predicted move (None if not using TimesFM)
+            predicted_move_pts = None
+            if self.timesfm_forecasts is not None and entry_date in self.timesfm_forecasts.index:
+                predicted_move_pts = float(self.timesfm_forecasts.loc[entry_date, "predicted_move_1sd"])
+
             setup = select_strategy(
                 spot=spot, vix=vix,
                 entry_date=str(entry_date.date()),
@@ -192,6 +199,7 @@ class Backtester:
                 next_expiry_date=str(next_expiry_date.date()) if next_expiry_date else None,
                 use_calendar=self.use_calendar,
                 ml_override=ml_override,
+                predicted_move_pts=predicted_move_pts,
             )
 
             if setup is None:

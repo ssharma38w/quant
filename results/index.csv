@@ -1,0 +1,3 @@
+run_dir,label,cagr,sharpe,max_dd,profit_factor,win_rate,total_trades,final_capital
+run_20260602_211639_sample,sample,6.72,0.42,-27.15,1.37,82.01,139,1519740.0
+run_20260602_211651_ml_rolling_sample,ml_rolling_sample,11.52,0.85,-20.67,1.88,82.58,132,2005641.0

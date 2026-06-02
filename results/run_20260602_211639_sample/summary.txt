@@ -1,0 +1,21 @@
+Nifty Weekly Options Backtest — 20260602_211639
+Label: sample
+==================================================
+  Total Return (%)               50.73
+  CAGR (%)                       6.72
+  Sharpe Ratio                   0.42
+  Max Drawdown (%)               -27.15
+  Win Rate (%)                   82.01
+  Avg Win (INR)                  16938.0
+  Avg Loss (INR)                 -56446.0
+  Profit Factor                  1.37
+  Total Trades                   139
+  Winning Trades                 114
+  Losing Trades                  25
+  Stop Loss Exits                13
+  Avg Lots / Trade               4.5
+  Final Capital (INR)            1519740.0
+  Initial Capital (INR)          1008269.0
+
+Strategy Mix: {'iron_condor': 137, 'short_straddle': 2}
+==================================================

@@ -1,14 +1,16 @@
 """
 Nifty Weekly Options Trading System
 Usage:
-  python main.py                    # backtest with real yfinance data
-  python main.py --sample           # offline test with synthetic data
-  python main.py --ml               # backtest + ML (expanding yearly window)
-  python main.py --ml --rolling     # ML with rolling 12-week training window
-  python main.py --ml --rolling --weeks=8   # rolling with custom window size
-  python main.py --sweep            # parameter sweep
-  python main.py signal             # this week's live trade recommendation
-  python main.py --csv nifty.csv    # backtest from your own CSV
+  python main.py                              # backtest with real yfinance data
+  python main.py --sample                     # offline test with synthetic data
+  python main.py --ml                         # backtest + ML (expanding yearly window)
+  python main.py --ml --rolling               # ML with rolling 16-week training window
+  python main.py --ml --rolling --weeks=8     # rolling with custom window size
+  python main.py --timesfm                    # backtest + TimesFM strike adjustment
+  python main.py --ml --rolling --timesfm     # ML + TimesFM combined
+  python main.py --sweep                      # parameter sweep
+  python main.py signal                       # this week's live trade recommendation
+  python main.py --csv nifty.csv              # backtest from your own CSV
 """
 import warnings
 warnings.filterwarnings("ignore")
@@ -24,6 +26,7 @@ from src.regime.state_model import RegimeModel
 from src.strategy.selector import select_strategy
 from src.backtest.engine import Backtester
 from src.backtest.metrics import performance_report, print_report, regime_breakdown
+from src.backtest.results_saver import save_run
 
 
 def _load_data(args, start, end):
@@ -40,6 +43,8 @@ def _load_data(args, start, end):
 
 
 def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
+    use_timesfm = "--timesfm" in args
+
     print(f"\nFetching Nifty + VIX data ({start} → {end})...")
     raw = _load_data(args, start, end)
 
@@ -58,7 +63,24 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
         run_sweep(df, regimes, capital)
         return
 
-    # ML predictor — two walk-forward modes, both no lookahead bias
+    # ── TimesFM batch forecast (before backtesting loop) ─────────────────────
+    timesfm_forecasts = None
+    if use_timesfm:
+        from src.models.timesfm_forecast import batch_forecast
+        from src.backtest.engine import get_weekly_schedule
+        schedule = get_weekly_schedule(df)
+        entry_dates = [e for e, _, _ in schedule if e in df.index]
+        print(f"\nRunning TimesFM forecasts for {len(entry_dates)} entry dates...")
+        timesfm_forecasts = batch_forecast(
+            df,
+            entry_dates=entry_dates,
+            vix_series=df["VIX"],
+            spot_series=df["Close"],
+            use_timesfm=True,
+            verbose=True,
+        )
+
+    # ── ML predictor (walk-forward, no lookahead) ─────────────────────────────
     ml_predictor, ml_features, wf_predictions = None, None, None
     if "--ml" in args:
         use_rolling = "--rolling" in args
@@ -105,10 +127,8 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
                 print(f"    {feat:<25} {score:.4f}")
 
     print("Running backtest...")
-    # Use walk-forward predictions for ML mode (honest out-of-sample)
     active_ml_features = None
     if wf_predictions is not None and len(wf_predictions) > 0:
-        # Rebuild features aligned to walk-forward prediction dates
         active_ml_features = ml_features[ml_features.index.isin(wf_predictions.index)]
         print(f"  Using walk-forward ML predictions for {len(wf_predictions)} weeks")
 
@@ -121,6 +141,7 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
         ml_predictor=ml_predictor if wf_predictions is not None else None,
         ml_features=active_ml_features,
         use_calendar=True,
+        timesfm_forecasts=timesfm_forecasts,
     )
     equity_curve = bt.run()
 
@@ -132,7 +153,25 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
         print("\nRegime Breakdown:")
         print(rd.to_string(index=False))
 
-    _plot_equity(equity_curve, capital)
+    # ── Build run label for results directory ─────────────────────────────────
+    parts = []
+    if "--ml" in args:
+        parts.append("ml_rolling" if "--rolling" in args else "ml_expanding")
+    if use_timesfm:
+        parts.append("timesfm")
+    if "--sample" in args:
+        parts.append("sample")
+    run_label = "_".join(parts) if parts else "rule_based"
+
+    extra = {
+        "ml_mode": "rolling" if "--rolling" in args else ("expanding" if "--ml" in args else "none"),
+        "timesfm": use_timesfm,
+        "window_weeks": next((int(a.split("=")[1]) for a in args if a.startswith("--weeks=")), 16)
+                        if "--ml" in args and "--rolling" in args else None,
+    }
+
+    save_run(metrics, equity_curve, bt.trades, run_label=run_label, extra=extra)
+    _plot_equity(equity_curve, capital, run_label)
     return equity_curve, bt.trades, metrics
 
 
@@ -158,6 +197,18 @@ def weekly_signal(args, capital=1_000_000):
     expiry = (today + timedelta(days=days_to_thu)).strftime("%Y-%m-%d")
     next_expiry = (today + timedelta(days=days_to_thu + 7)).strftime("%Y-%m-%d")
 
+    # TimesFM forecast for live signal
+    predicted_move_pts = None
+    if "--timesfm" in args:
+        from src.models.timesfm_forecast import forecast_weekly_range
+        fc = forecast_weekly_range(df, df.index[-1], vix, spot, model=None)
+        # _load_model called inside for live signal
+        from src.models.timesfm_forecast import _load_model
+        tfm = _load_model(verbose=True)
+        if tfm:
+            fc = forecast_weekly_range(df, df.index[-1], vix, spot, model=tfm)
+        predicted_move_pts = fc["predicted_move_1sd"]
+
     print("\n" + "=" * 58)
     print("  NIFTY WEEKLY OPTIONS — SIGNAL")
     print("=" * 58)
@@ -166,6 +217,10 @@ def weekly_signal(args, capital=1_000_000):
     print(f"  HV20         : {latest['HV20']*100:>9.2f}%")
     print(f"  IV/HV Ratio  : {iv_hv:>10.2f}  {'✓ EDGE' if iv_hv > 1.05 else '✗ NO EDGE'}")
     print(f"  1SD Range    :  {spot-weekly_move:>8,.0f} – {spot+weekly_move:,.0f}  (±{weekly_move:,.0f} pts)")
+    if predicted_move_pts:
+        range_vs_vix = predicted_move_pts / weekly_move if weekly_move > 0 else 1.0
+        direction = "QUIET" if range_vs_vix < 0.9 else ("WIDE" if range_vs_vix > 1.1 else "NEUTRAL")
+        print(f"  TimesFM Move : ±{predicted_move_pts:>7,.0f} pts  ({direction} — ratio {range_vs_vix:.2f}×)")
     print(f"  Regime       :  {state['regime'].upper():<12}  confidence: {state['confidence']:.0%}")
     print(f"  Expiry       :  {expiry}")
     print("-" * 58)
@@ -174,10 +229,11 @@ def weekly_signal(args, capital=1_000_000):
         spot=spot, vix=vix, entry_date=today.strftime("%Y-%m-%d"),
         expiry_date=expiry, regime=state["regime"], confidence=state["confidence"],
         iv_hv_ratio=iv_hv, next_expiry_date=next_expiry, use_calendar=True,
+        predicted_move_pts=predicted_move_pts,
     )
 
     if setup is None:
-        print("  RECOMMENDATION: SKIP (IV not rich or VIX too high)")
+        print("  RECOMMENDATION: SKIP (IV not rich, VIX too high, or TimesFM warns of wide move)")
     else:
         print(f"  STRATEGY     :  {setup.strategy.upper().replace('_', ' ')}")
         print(f"  Max Profit   : {setup.max_profit:>9,.1f} pts  = ₹{setup.max_profit*75:,.0f}/lot")
@@ -191,20 +247,21 @@ def weekly_signal(args, capital=1_000_000):
     return setup
 
 
-def _plot_equity(equity_curve, initial_capital):
+def _plot_equity(equity_curve, initial_capital, run_label: str = ""):
     fig, axes = plt.subplots(3, 1, figsize=(14, 11), sharex=True)
 
-    # Equity curve
     ret = equity_curve["capital"] / initial_capital * 100 - 100
     axes[0].plot(equity_curve.index, ret, color="steelblue", linewidth=1.5)
     axes[0].axhline(0, color="gray", linestyle="--", linewidth=0.8)
     axes[0].fill_between(equity_curve.index, ret, 0, where=(ret >= 0), alpha=0.2, color="green")
     axes[0].fill_between(equity_curve.index, ret, 0, where=(ret < 0), alpha=0.2, color="red")
     axes[0].set_ylabel("Cumulative Return (%)")
-    axes[0].set_title("Nifty Weekly Options — Equity Curve")
+    title = f"Nifty Weekly Options — Equity Curve"
+    if run_label:
+        title += f" [{run_label}]"
+    axes[0].set_title(title)
     axes[0].grid(True, alpha=0.3)
 
-    # Weekly P&L bars by strategy
     colors = {
         "short_straddle": "green", "iron_condor": "darkorange",
         "calendar_spread": "purple", "broken_wing_butterfly": "brown",
@@ -220,7 +277,6 @@ def _plot_equity(equity_curve, initial_capital):
     axes[1].legend(loc="upper left", fontsize=7, ncol=2)
     axes[1].grid(True, alpha=0.3)
 
-    # VIX overlay
     if "vix" in equity_curve.columns:
         axes[2].fill_between(equity_curve.index, equity_curve["vix"],
                              alpha=0.4, color="red", label="India VIX")
@@ -232,8 +288,9 @@ def _plot_equity(equity_curve, initial_capital):
         axes[2].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig("backtest_results.png", dpi=150)
-    print("\nEquity curve saved → backtest_results.png")
+    fname = f"backtest_results_{run_label}.png" if run_label else "backtest_results.png"
+    plt.savefig(fname, dpi=150)
+    print(f"  Equity curve saved → {fname}")
     plt.close()
 
 
