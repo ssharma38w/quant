@@ -56,20 +56,29 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
         run_sweep(df, regimes, capital)
         return
 
-    # ML predictor
-    ml_predictor, ml_features = None, None
+    # ML predictor (walk-forward — no lookahead bias)
+    ml_predictor, ml_features, wf_predictions = None, None, None
     if "--ml" in args:
-        print("Training ML strategy predictor...")
+        print("Training ML strategy predictor (walk-forward, no lookahead)...")
         from src.models.feature_engineering import build_weekly_features
         from src.models.strategy_predictor import StrategyPredictor
+        from src.models.walk_forward import build_walk_forward_predictions
 
-        # First pass: run rule-based backtest to generate training labels
-        bt0 = Backtester(df, regimes, capital=capital, stop_loss_multiple=2.0, use_calendar=False)
+        # First pass: rule-based backtest → generate trade labels for ML training
+        bt0 = Backtester(df, regimes, capital=capital, stop_loss_multiple=2.0,
+                         delta_hedge=False, use_calendar=False)
         bt0.run()
 
         ml_features = build_weekly_features(df, regime_probs)
+
+        # Walk-forward: train on past, predict future (no lookahead)
+        wf_predictions = build_walk_forward_predictions(
+            df, regime_probs, bt0.trades, warmup_years=2, verbose=True
+        )
+
+        # Also keep in-sample predictor for signal generation
         ml_predictor = StrategyPredictor()
-        ml_predictor.fit(ml_features, bt0.trades, verbose=True)
+        ml_predictor.fit(ml_features, bt0.trades, verbose=False)
 
         imp = ml_predictor.feature_importance()
         if not imp.empty:
@@ -78,11 +87,21 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
                 print(f"    {feat:<25} {score:.4f}")
 
     print("Running backtest...")
+    # Use walk-forward predictions for ML mode (honest out-of-sample)
+    active_ml_features = None
+    if wf_predictions is not None and len(wf_predictions) > 0:
+        # Rebuild features aligned to walk-forward prediction dates
+        active_ml_features = ml_features[ml_features.index.isin(wf_predictions.index)]
+        print(f"  Using walk-forward ML predictions for {len(wf_predictions)} weeks")
+
     bt = Backtester(
         df, regimes, capital=capital,
         stop_loss_multiple=2.0,
-        ml_predictor=ml_predictor,
-        ml_features=ml_features,
+        theta_target_pct=0.65,
+        delta_hedge=True,
+        delta_threshold=0.25,
+        ml_predictor=ml_predictor if wf_predictions is not None else None,
+        ml_features=active_ml_features,
         use_calendar=True,
     )
     equity_curve = bt.run()
