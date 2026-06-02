@@ -1,31 +1,14 @@
 """
-Adaptive strategy selector: picks the best strategy each week
-based on regime, IV/HV premium, and VIX level.
+Adaptive strategy selector based on VIX zone + regime + IV/HV premium.
+
+VIX zones (informed by real backtest results):
+  < 12         → Short Straddle (ultra-low vol, max premium capture)
+  12–16        → Short Straddle (low vol regime confirmed)
+  16–21        → Short Strangle @ 0.8 SD (normal, some buffer)
+  21–26        → Iron Condor, 400-pt wings (elevated, defined risk)
+  > 26         → Skip (too much tail risk for premium selling)
 """
 from .strategies import short_straddle, short_strangle, iron_condor, TradeSetup
-
-
-STRATEGY_RULES = {
-    # (regime, vix_level, iv_hv_ratio) → strategy, params
-    # Low vol: aggressive premium selling
-    "low_vol": {
-        "strategy": "short_straddle",
-        "sd_multiple": None,
-        "wing_width": None,
-    },
-    # Normal: sell 1SD strangle
-    "normal": {
-        "strategy": "short_strangle",
-        "sd_multiple": 1.0,
-        "wing_width": None,
-    },
-    # High vol: iron condor (defined risk), wider strikes
-    "high_vol": {
-        "strategy": "iron_condor",
-        "sd_multiple": 0.8,
-        "wing_width": 300,
-    },
-}
 
 
 def select_strategy(
@@ -37,36 +20,34 @@ def select_strategy(
     confidence: float,
     iv_hv_ratio: float,
     dte: int = 5,
-) -> TradeSetup:
+) -> TradeSetup | None:
     """
-    Select and build a strategy based on market conditions.
+    Returns a TradeSetup or None (skip this week).
 
-    Override rules:
-    - If IV/HV < 1.0: IV is cheap → skip selling premium (return None)
-    - If VIX > 25 and regime != high_vol: force iron_condor for safety
-    - If confidence < 0.55: default to iron_condor (safer)
+    Skip conditions:
+    - IV/HV < 1.05 → not enough premium over realized vol
+    - VIX > 26 → tail risk too high for naked/semi-naked strategies
     """
-    if iv_hv_ratio < 1.0:
-        return None  # No edge — IV not rich enough to sell
+    if iv_hv_ratio < 1.05:
+        return None
 
-    effective_regime = regime
-    if vix > 25:
-        effective_regime = "high_vol"
-    if confidence < 0.55:
-        effective_regime = "high_vol"  # Uncertain regime → go safe
-
-    rule = STRATEGY_RULES.get(effective_regime, STRATEGY_RULES["normal"])
-    strat = rule["strategy"]
+    if vix > 26:
+        return None
 
     kwargs = dict(
         spot=spot, vix=vix, entry_date=entry_date, expiry_date=expiry_date,
-        regime=effective_regime, confidence=confidence, dte=dte
+        regime=regime, confidence=confidence, dte=dte,
     )
 
-    if strat == "short_straddle":
+    # VIX-zone based selection (overrides HMM regime when VIX is clear)
+    if vix <= 16:
         return short_straddle(**kwargs)
-    elif strat == "short_strangle":
-        return short_strangle(**kwargs, sd_multiple=rule["sd_multiple"])
-    elif strat == "iron_condor":
-        return iron_condor(**kwargs, short_sd=rule["sd_multiple"], wing_width=rule["wing_width"])
-    return None
+
+    if vix <= 21:
+        # Low confidence → widen to strangle for safety
+        sd = 0.7 if confidence >= 0.70 else 0.9
+        return short_strangle(**kwargs, sd_multiple=sd)
+
+    # VIX 21–26: Iron Condor, wider wings for elevated vol
+    wing = 400 if vix > 23 else 300
+    return iron_condor(**kwargs, short_sd=0.8, wing_width=wing)

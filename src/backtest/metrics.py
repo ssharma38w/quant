@@ -37,6 +37,14 @@ def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
     for t in trades:
         strat_counts[t.strategy] = strat_counts.get(t.strategy, 0) + 1
 
+    # Stop loss stats (if available in equity curve)
+    stop_loss_exits = 0
+    if "exit_type" in ec.columns:
+        stop_loss_exits = (ec["exit_type"] == "stop_loss").sum()
+
+    # Avg lots traded
+    avg_lots = ec["lots"].mean() if "lots" in ec.columns else 1
+
     metrics = {
         "Total Return (%)": round(total_return, 2),
         "CAGR (%)": round(cagr, 2),
@@ -49,9 +57,11 @@ def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
         "Total Trades": len(trade_pnls),
         "Winning Trades": len(wins),
         "Losing Trades": len(losses),
+        "Stop Loss Exits": stop_loss_exits,
+        "Avg Lots / Trade": round(avg_lots, 1),
         "Strategy Mix": strat_counts,
-        "Final Capital": round(final_capital, 0),
-        "Initial Capital": round(initial_capital, 0),
+        "Final Capital (INR)": round(final_capital, 0),
+        "Initial Capital (INR)": round(initial_capital, 0),
     }
     return metrics
 
