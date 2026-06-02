@@ -82,8 +82,8 @@ def build_walk_forward_predictions(
         if len(train_feat) < 40 or len(test_feat) == 0:
             continue
 
-        # Build training labels
-        X_train, y_train = [], []
+        # Build training labels — track matched dates for proper DatetimeIndex
+        X_train, y_train, matched_dates = [], [], []
         for date in train_feat.index:
             key = str(date.date())
             if key in trade_labels:
@@ -91,14 +91,18 @@ def build_walk_forward_predictions(
                 label = _strat_to_label(label_info["strategy"], label_info["pnl"])
                 X_train.append(train_feat.loc[date].values)
                 y_train.append(label)
+                matched_dates.append(date)
 
         if len(X_train) < 20:
             continue
 
+        # DataFrame must have DatetimeIndex so build_training_data can call date.date()
+        train_df = pd.DataFrame(X_train, index=matched_dates, columns=train_feat.columns)
+
         predictor = StrategyPredictor(use_xgboost=True)
         predictor.fit(
-            pd.DataFrame(X_train, columns=train_feat.columns),
-            _make_mock_trades(y_train, train_feat.index[:len(X_train)]),
+            train_df,
+            _make_mock_trades(y_train, matched_dates),
             verbose=False,
         )
 
