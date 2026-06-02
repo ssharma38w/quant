@@ -3,7 +3,9 @@ Nifty Weekly Options Trading System
 Usage:
   python main.py                    # backtest with real yfinance data
   python main.py --sample           # offline test with synthetic data
-  python main.py --ml               # backtest + train ML strategy predictor
+  python main.py --ml               # backtest + ML (expanding yearly window)
+  python main.py --ml --rolling     # ML with rolling 12-week training window
+  python main.py --ml --rolling --weeks=8   # rolling with custom window size
   python main.py --sweep            # parameter sweep
   python main.py signal             # this week's live trade recommendation
   python main.py --csv nifty.csv    # backtest from your own CSV
@@ -56,13 +58,24 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
         run_sweep(df, regimes, capital)
         return
 
-    # ML predictor (walk-forward — no lookahead bias)
+    # ML predictor — two walk-forward modes, both no lookahead bias
     ml_predictor, ml_features, wf_predictions = None, None, None
     if "--ml" in args:
-        print("Training ML strategy predictor (walk-forward, no lookahead)...")
+        use_rolling = "--rolling" in args
+        window_weeks = 12
+        for a in args:
+            if a.startswith("--weeks="):
+                window_weeks = int(a.split("=")[1])
+
+        mode = f"rolling {window_weeks}-week window" if use_rolling else "expanding yearly window"
+        print(f"Training ML strategy predictor ({mode}, no lookahead)...")
+
         from src.models.feature_engineering import build_weekly_features
         from src.models.strategy_predictor import StrategyPredictor
-        from src.models.walk_forward import build_walk_forward_predictions
+        from src.models.walk_forward import (
+            build_walk_forward_predictions,
+            build_rolling_predictions,
+        )
 
         # First pass: rule-based backtest → generate trade labels for ML training
         bt0 = Backtester(df, regimes, capital=capital, stop_loss_multiple=2.0,
@@ -71,12 +84,17 @@ def run_backtest(args, start="2019-01-01", end="2025-05-30", capital=1_000_000):
 
         ml_features = build_weekly_features(df, regime_probs)
 
-        # Walk-forward: train on past, predict future (no lookahead)
-        wf_predictions = build_walk_forward_predictions(
-            df, regime_probs, bt0.trades, warmup_years=2, verbose=True
-        )
+        if use_rolling:
+            wf_predictions = build_rolling_predictions(
+                df, regime_probs, bt0.trades,
+                window_weeks=window_weeks, verbose=True,
+            )
+        else:
+            wf_predictions = build_walk_forward_predictions(
+                df, regime_probs, bt0.trades, warmup_years=2, verbose=True,
+            )
 
-        # Also keep in-sample predictor for signal generation
+        # In-sample predictor kept for live signal generation only
         ml_predictor = StrategyPredictor()
         ml_predictor.fit(ml_features, bt0.trades, verbose=False)
 
