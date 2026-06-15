@@ -11,6 +11,13 @@ Usage:
   python main.py --sweep                      # parameter sweep
   python main.py signal                       # this week's live trade recommendation
   python main.py --csv nifty.csv              # backtest from your own CSV
+
+  python main.py --equity                          # Lynch-style multi-stock equity backtest (100+ NSE stocks)
+  python main.py --equity --universe=mini          # 10-stock smoke test
+  python main.py --equity --top-n=25 --freq=Q      # custom portfolio size / quarterly rebalance
+  python main.py --equity --start=2018-01-01       # custom start date
+  python main.py --equity --refresh-cache          # force re-download price cache
+  python main.py --equity --picks                  # live picks today (current fundamentals, caveated)
 """
 import warnings
 warnings.filterwarnings("ignore")
@@ -294,9 +301,76 @@ def _plot_equity(equity_curve, initial_capital, run_label: str = ""):
     plt.close()
 
 
+def run_equity_backtest(args, start="2015-01-01", end=None, capital=1_000_000):
+    from src.equity.universe import UNIVERSE, MINI_UNIVERSE, universe_df
+    from src.equity.fetcher import load_universe_prices, fetch_nifty_benchmark
+    from src.equity.engine import EquityBacktester, EquityBacktestConfig
+    from src.equity.reporting import (
+        per_stock_breakdown, per_sector_breakdown, per_category_breakdown,
+        save_equity_run, print_equity_report, plot_equity_vs_benchmark,
+    )
+    from src.backtest.metrics import performance_report
+
+    for a in args:
+        if a.startswith("--start="):
+            start = a.split("=")[1]
+        if a.startswith("--end="):
+            end = a.split("=")[1]
+
+    universe = MINI_UNIVERSE if any(a == "--universe=mini" for a in args) else UNIVERSE
+
+    config = EquityBacktestConfig(start=start, end=end, initial_capital=capital)
+    for a in args:
+        if a.startswith("--top-n="):
+            config.top_n = int(a.split("=")[1])
+        if a.startswith("--freq="):
+            config.rebalance_freq = a.split("=")[1]
+
+    use_cache = "--refresh-cache" not in args
+    prices = load_universe_prices(start, end, use_cache=use_cache, universe=universe)
+    nifty = fetch_nifty_benchmark(start, end)
+
+    print(f"\nRunning Lynch-style equity backtest "
+          f"({len(prices)} stocks, {config.rebalance_freq}-rebalance, top_n={config.top_n})...")
+    bt = EquityBacktester(prices, nifty, universe_df(universe), config)
+    equity_curve, trades = bt.run()
+
+    if equity_curve.empty:
+        print("  No equity curve produced — check date range / cache.")
+        return None, None, None
+
+    metrics = performance_report(equity_curve, trades, periods_per_year=252)
+
+    per_stock = per_stock_breakdown(trades)
+    per_sector = per_sector_breakdown(trades)
+    per_category = per_category_breakdown(trades)
+    print_equity_report(metrics, per_stock, per_sector, per_category)
+
+    run_label = "equity_lynch" + ("_mini" if universe is MINI_UNIVERSE else "")
+    extra = {
+        "n_stocks": len(prices),
+        "rebalance_freq": config.rebalance_freq,
+        "top_n": config.top_n,
+        "weighting": config.weighting,
+    }
+    save_equity_run(equity_curve, trades, run_label=run_label, extra=extra)
+    plot_equity_vs_benchmark(equity_curve, trades, run_label=run_label)
+    return equity_curve, trades, metrics
+
+
+def equity_live_picks(args):
+    from src.equity.live_picks import generate_live_picks
+    return generate_live_picks()
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "signal" in args:
         weekly_signal(args)
+    elif "--equity" in args:
+        if "--picks" in args:
+            equity_live_picks(args)
+        else:
+            run_equity_backtest(args)
     else:
         run_backtest(args)

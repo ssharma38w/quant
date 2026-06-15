@@ -214,3 +214,6 @@ backtest_results*.png
 
 # Results directory: keep index/summaries, skip large CSVs
 results/run_*/equity_curve.csv
+
+# Equity backtest price cache (regenerated from yfinance)
+data/equity_cache/

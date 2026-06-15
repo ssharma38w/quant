@@ -3,7 +3,7 @@ import numpy as np
 from tabulate import tabulate
 
 
-def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
+def performance_report(equity_curve: pd.DataFrame, trades: list, periods_per_year: int = 52) -> dict:
     ec = equity_curve.copy()
     initial_capital = ec["capital"].iloc[0]
     final_capital = ec["capital"].iloc[-1]
@@ -21,10 +21,10 @@ def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
     avg_loss = np.mean(losses) if losses else 0
     profit_factor = abs(sum(wins) / sum(losses)) if losses else float("inf")
 
-    # Sharpe (weekly returns)
-    weekly_pnl = ec["pnl"].dropna()
-    weekly_returns = weekly_pnl / initial_capital
-    sharpe = (weekly_returns.mean() / weekly_returns.std() * np.sqrt(52)) if weekly_returns.std() > 0 else 0
+    # Sharpe (periods_per_year=52 for weekly options, 252 for daily equity curves)
+    period_pnl = ec["pnl"].dropna()
+    period_returns = period_pnl / initial_capital
+    sharpe = (period_returns.mean() / period_returns.std() * np.sqrt(periods_per_year)) if period_returns.std() > 0 else 0
 
     # Max drawdown
     capital_series = ec["capital"]
@@ -66,10 +66,10 @@ def performance_report(equity_curve: pd.DataFrame, trades: list) -> dict:
     return metrics
 
 
-def print_report(metrics: dict):
+def print_report(metrics: dict, title: str = "NIFTY WEEKLY OPTIONS BACKTEST REPORT"):
     rows = [(k, v) for k, v in metrics.items() if k not in ("Strategy Mix",)]
     print("\n" + "=" * 50)
-    print("   NIFTY WEEKLY OPTIONS BACKTEST REPORT")
+    print(f"   {title}")
     print("=" * 50)
     print(tabulate(rows, headers=["Metric", "Value"], tablefmt="rounded_outline"))
     print("\nStrategy Mix:", metrics.get("Strategy Mix", {}))
@@ -97,3 +97,30 @@ def regime_breakdown(trades: list) -> pd.DataFrame:
     summary = df.groupby(["regime", "strategy"])["pnl"].agg(["count", "sum", "mean"]).reset_index()
     summary.columns = ["regime", "strategy", "trades", "total_pnl", "avg_pnl"]
     return summary
+
+
+def breakdown_by(trades: list, group_attr: str) -> pd.DataFrame:
+    """
+    Generic grouping of trades by any attribute (e.g. 'sector', 'category', 'strategy').
+    Returns count, total_pnl, avg_pnl, win_rate per group, sorted by total_pnl desc.
+    """
+    records = []
+    for t in trades:
+        if t.pnl is not None:
+            records.append({
+                "group": getattr(t, group_attr, "Unknown"),
+                "pnl": t.pnl,
+                "win": t.pnl >= 0,
+            })
+    if not records:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(records)
+    summary = df.groupby("group")["pnl"].agg(["count", "sum", "mean"]).reset_index()
+    summary.columns = [group_attr, "trades", "total_pnl", "avg_pnl"]
+    win_rate = df.groupby("group")["win"].mean().reset_index()
+    win_rate.columns = [group_attr, "win_rate"]
+    summary = summary.merge(win_rate, on=group_attr)
+    summary["win_rate"] = (summary["win_rate"] * 100).round(2)
+    summary[["total_pnl", "avg_pnl"]] = summary[["total_pnl", "avg_pnl"]].round(2)
+    return summary.sort_values("total_pnl", ascending=False).reset_index(drop=True)
