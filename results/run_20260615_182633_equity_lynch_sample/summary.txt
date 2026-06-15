@@ -1,0 +1,21 @@
+Nifty Weekly Options Backtest — 20260615_182633
+Label: equity_lynch_sample
+==================================================
+  Total Return (%)               243.47
+  CAGR (%)                       14.7
+  Sharpe Ratio                   1.65
+  Max Drawdown (%)               -5.64
+  Win Rate (%)                   50.0
+  Avg Win (INR)                  13734.0
+  Avg Loss (INR)                 -9958.0
+  Profit Factor                  1.38
+  Total Trades                   778
+  Winning Trades                 389
+  Losing Trades                  389
+  Stop Loss Exits                0
+  Avg Lots / Trade               1
+  Final Capital (INR)            3434734.0
+  Initial Capital (INR)          1000000.0
+
+Strategy Mix: {'TORNTPOWER.NS': 8, 'SBILIFE.NS': 9, 'SHREECEM.NS': 4, 'AARTIIND.NS': 9, 'DIVISLAB.NS': 14, 'ICICIGI.NS': 6, 'ONGC.NS': 9, 'BPCL.NS': 8, 'SIEMENS.NS': 1, 'DIXON.NS': 5, 'AMBUJACEM.NS': 4, 'BEL.NS': 6, 'BHARTIARTL.NS': 16, 'CUMMINSIND.NS': 5, 'KOTAKBANK.NS': 2, 'ICICIPRULI.NS': 12, 'BIOCON.NS': 5, 'HINDUNILVR.NS': 12, 'EICHERMOT.NS': 13, 'JSWSTEEL.NS': 15, 'ITC.NS': 7, 'COFORGE.NS': 4, 'PERSISTENT.NS': 2, 'VBL.NS': 9, 'HINDALCO.NS': 9, 'BAJFINANCE.NS': 13, 'TORNTPHARM.NS': 12, 'JINDALSTEL.NS': 8, 'TECHM.NS': 8, 'BANKBARODA.NS': 4, 'NHPC.NS': 8, 'SBIN.NS': 10, 'AXISBANK.NS': 5, 'ABB.NS': 8, 'INDUSTOWER.NS': 8, 'BALKRISIND.NS': 5, 'HDFCLIFE.NS': 7, 'ADANIENT.NS': 14, 'ICICIBANK.NS': 8, 'MOTHERSON.NS': 14, 'BAJAJ-AUTO.NS': 6, 'TATASTEEL.NS': 11, 'ADANIPORTS.NS': 11, 'HAL.NS': 5, 'NESTLEIND.NS': 12, 'IDEA.NS': 7, 'POWERGRID.NS': 14, 'RECLTD.NS': 4, 'VOLTAS.NS': 8, 'VEDL.NS': 6, 'WIPRO.NS': 7, 'UPL.NS': 7, 'PIIND.NS': 4, 'ULTRACEMCO.NS': 12, 'COALINDIA.NS': 8, 'ADANIPOWER.NS': 5, 'APOLLOHOSP.NS': 10, 'SRF.NS': 9, 'GMRINFRA.NS': 3, 'DLF.NS': 2, 'TATAPOWER.NS': 4, 'LT.NS': 3, 'TATAMOTORS.NS': 12, 'ACC.NS': 9, 'HCLTECH.NS': 4, 'TITAN.NS': 6, 'PFC.NS': 8, 'INFY.NS': 5, 'COLPAL.NS': 12, 'GODREJCP.NS': 12, 'BAJAJFINSV.NS': 9, 'CIPLA.NS': 6, 'MARICO.NS': 6, 'BERGEPAINT.NS': 3, 'LUPIN.NS': 6, 'HDFCBANK.NS': 3, 'SUNPHARMA.NS': 7, 'BOSCHLTD.NS': 3, 'MUTHOOTFIN.NS': 8, 'ALKEM.NS': 9, 'SAIL.NS': 3, 'TVSMOTOR.NS': 4, 'GAIL.NS': 9, 'GRASIM.NS': 5, 'HAVELLS.NS': 6, 'FEDERALBNK.NS': 7, 'NMDC.NS': 7, 'DEEPAKNTR.NS': 4, 'MARUTI.NS': 4, 'AUROPHARMA.NS': 1, 'ASIANPAINT.NS': 8, 'ATGL.NS': 7, 'NTPC.NS': 12, 'CROMPTON.NS': 6, 'DRREDDY.NS': 6, 'IDFCFIRSTB.NS': 4, 'IOC.NS': 7, 'PNB.NS': 4, 'M&M.NS': 6, 'DABUR.NS': 5, 'RELIANCE.NS': 3, 'MPHASIS.NS': 5, 'TATACONSUM.NS': 1, 'INDUSINDBK.NS': 3, 'PIDILITIND.NS': 4, 'LTIM.NS': 8, 'BRITANNIA.NS': 6, 'TCS.NS': 2, 'CHOLAFIN.NS': 9, 'DMART.NS': 3, 'HEROMOTOCO.NS': 4, 'PETRONET.NS': 3}
+==================================================
